@@ -1,0 +1,1069 @@
+---
+title: "Spotify Data Analysis"
+date: "12/01/2021"
+output: html_document
+---
+
+<p align="center">
+<img height="150" src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_CMYK_Green.png"> </p> <br>
+
+Spotify has globally become the go-to music library for all music lovers since the last decade. It's recemmendation model which internally uses artists popularity and content-based filtering based on the genre the user likes is in itself a state-of-the-art model. This is an analysis on how different audio features can lead to popularity and their correlation with genre and subgenres.
+
+## {.tabset .tabset-pills}
+
+### Synopsis
+
+**Problem Statement**
+
+Music taste is subjective but repetitive, which means song listeners can have preference for certain Music Genres over others. Genre classification is a critical task for Music platforms like Spotify as it helps artists connect with new audiences. The volumne of new songs released everyday is in millions so automating this task is of paramount importance. However this is only possible when Genres have unique characteristics which differentiate them from each other.
+With this dataset we will explore the following:
+
+*	 Understanding the song preferences of Spotify userbase
+*	 It will also serve as a good approximation of song preferences of millennials since majority of Spotify userbase is millennial. 
+*	 What are the key characteristics of a Song Genre?
+*	 What Factors contribute to Song Popularity?
+
+**Use cases for Spotify:**
+
+* 	How to accurately classify songs into different Genre Categories based on Song characteristics
+* 	Gauge the popularity of a song before its release on the platform
+
+**High Level Approach**
+
+We have dual objectives in mind when we’re evaluating the dataset. First to understand key characteristics of a Genre and secondly to determine key factors which contribute to Song popularity
+
+**Solution Overview:**
+
+1. Data Dictionary Review – Familiarization with data columns, data source
+2. Specifications of the data – Data size, number of rows and columns, Time period over which it is collected
+3. Feature Datatypes – Check datatype for each feature and convert as appropriate
+4. Data Cleaning – Correcting inconsistent data by filling out missing values and smoothing out noisy data (outliers)
+5. Segregate Numerical and Categorical variables and perform Exploratory Data Analysis
+6. Exploratory Data Analysis – Summary Statistics, Correlation analysis, Visualization (boxplots and distribution plots), count plots
+
+Our current approach will be able to partially address the problem. Using EDA methods we are able to generate insights for:
+
+* Characteristics of different song genres
+* Song Popularity characteristics
+
+The graphical techniques in combination with summary statistics help us understand the space of the data. It gave us the intuition that each Genre is its own cluster with unique characteristics, and using the right model we can capture those characteristics and make predictions about the Genre. 
+
+1. Using a Decision Tree or K-nearest neighbour model on the dataset can help us get accurate predictions for classification of songs into Genres. 
+2. For predicting Song popularity we could use a Decision Tree Regressor/XGBoost model to predict the track popularity.
+
+**Benefits for the consumer of the analysis**
+
+The analysis will be useful for Spotify, enabling them to automatically classify songs based on song characteristics. Each day millions of songs are posted on the Spotify platform, it is crucial to automatically classify songs into Genres so that they can be fed to the recommendation algorithm which will enable for the songs to show up in the recommendation lists of users who are more likely to listen to the song.
+
+Being able to predict the song popularity, allows Spotify to release the song in selective regions and selective userbase where it is likely to be more popular. 
+
+### Packages Required
+
+Following are the packages used:- 
+
+**tidyverse** = Allows for data manipulation and loading ggplot for graphics and dplyr for data manipulation <br>
+**data.table** = Reading large tables <br>
+**gridExtra** = For simultaneous display of multiple plots <br>
+**corrplot** = Correlation Matrix Visualization <br>
+**DT** = For HTML display of spotify dataset <br>
+**kableExtra** = For additional features on outputting tables <br>
+**nnet** = For Logistic Regression modeling <br>
+**car** = For checking multicollinearity through Variance Inflation Factor <br>
+**Rtsne** = Cluster grouping of audio features using TSNE algorithm <br>
+**caret** = Training models for hyperparameter tuning <br>
+**class** = For KNN modeling <br>
+**e1071** = For SVM modeling <br>
+**rpart** = For decision tree modeling <br>
+**rpart.plot** = For plotting decision tree graph <br>
+**randomForest** = For Random Forest modeling <br>
+**xgboost** = For XGBoost modeling <br>
+**doParallel** = For parallel processing <br>
+**kernlab** = For hyperparameter tuning of SVM <br>
+**ranger** = For hyperparameter tuning of Random Forest <br>
+
+```{r loading_package, message=FALSE, warnings=FALSE}
+# loading packages
+packages = c('tidyverse', 'data.table', 'gridExtra', 'corrplot', 'DT', 
+             'kableExtra', 'nnet', 'car', 'Rtsne', 'caret', 'class', 'e1071', 
+             'rpart', 'rpart.plot', 'randomForest', 'xgboost', 'doParallel', 
+             'kernlab', 'ranger')
+installed_packages = packages %in% rownames(installed.packages())
+if (any(installed_packages == F)) {
+  install.packages(packages[!installed_packages])
+}
+# suppressing warnings
+options(warn = -1)
+suppressMessages(invisible(lapply(packages, library, character.only = T)))
+```
+
+### Data Preparation {.tabset}
+
+Everything to know about the data to be here.
+
+#### Data Source
+
+The data comes from Spotify via the [spotifyr package](https://www.rcharlie.com/spotifyr/). *Charlie Thompson, Josiah Parry, Donal Phipps, and Tom Wolff* authored this package to make it easier to get either your own data or general metadata around songs from Spotify's API. 
+
+A subset of the data had already been extracted and is available for access on [Github](https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-01-21) on which the analysis has been done. The song database consists of songs, its popularity, artists, the album to which the song belongs to from 6 main categories (EDM, Latin, Pop, R&B, Rap, & Rock) from Jan 1957 to Jan 2020.
+
+
+#### Data Dictionary
+
+|feature                  |data_type |description |
+|:---|:---|:-----------|
+|track_id                 |character | Song unique ID|
+|track_name               |character | Song Name|
+|track_artist             |character | Song Artist|
+|track_popularity         |double    | Song Popularity (0-100) where higher is better |
+|track_album_id           |character | Album unique ID|
+|track_album_name         |character | Song album name |
+|track_album_release_date |character | Date when album released |
+|playlist_name            |character | Name of playlist |
+|playlist_id              |character | Playlist ID|
+|playlist_genre           |character | Playlist genre |
+|playlist_subgenre        |character | Playlist subgenre|
+|danceability             |double    | Danceability describes how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity. A value of 0.0 is least danceable and 1.0 is most danceable. |
+|energy                   |double    | Energy is a measure from 0.0 to 1.0 and represents a perceptual measure of intensity and activity. Typically, energetic tracks feel fast, loud, and noisy. For example, death metal has high energy, while a Bach prelude scores low on the scale. Perceptual features contributing to this attribute include dynamic range, perceived loudness, timbre, onset rate, and general entropy. |
+|key                      |double    | The estimated overall key of the track. Integers map to pitches using standard Pitch Class notation . E.g. 0 = C, 1 = C♯/D♭, 2 = D, and so on. If no key was detected, the value is -1. |
+|loudness                 |double    | The overall loudness of a track in decibels (dB). Loudness values are averaged across the entire track and are useful for comparing relative loudness of tracks. Loudness is the quality of a sound that is the primary psychological correlate of physical strength (amplitude). Values typical range between -60 and 0 db.|
+|mode                     |double    | Mode indicates the modality (major or minor) of a track, the type of scale from which its melodic content is derived. Major is represented by 1 and minor is 0.|
+|speechiness              |double    | Speechiness detects the presence of spoken words in a track. The more exclusively speech-like the recording (e.g. talk show, audio book, poetry), the closer to 1.0 the attribute value. Values above 0.66 describe tracks that are probably made entirely of spoken words. Values between 0.33 and 0.66 describe tracks that may contain both music and speech, either in sections or layered, including such cases as rap music. Values below 0.33 most likely represent music and other non-speech-like tracks. |
+|acousticness             |double    | A confidence measure from 0.0 to 1.0 of whether the track is acoustic. 1.0 represents high confidence the track is acoustic.|
+|instrumentalness         |double    | Predicts whether a track contains no vocals. “Ooh” and “aah” sounds are treated as instrumental in this context. Rap or spoken word tracks are clearly “vocal”. The closer the instrumentalness value is to 1.0, the greater likelihood the track contains no vocal content. Values above 0.5 are intended to represent instrumental tracks, but confidence is higher as the value approaches 1.0. |
+|liveness                 |double    | Detects the presence of an audience in the recording. Higher liveness values represent an increased probability that the track was performed live. A value above 0.8 provides strong likelihood that the track is live. |
+|valence                  |double    | A measure from 0.0 to 1.0 describing the musical positiveness conveyed by a track. Tracks with high valence sound more positive (e.g. happy, cheerful, euphoric), while tracks with low valence sound more negative (e.g. sad, depressed, angry). |
+|tempo                    |double    | The overall estimated tempo of a track in beats per minute (BPM). In musical terminology, tempo is the speed or pace of a given piece and derives directly from the average beat duration. |
+|duration_ms              |double    | Duration of song in milliseconds |
+
+#### Raw Dataset
+
+```{r reading_data, message=FALSE, warning=FALSE}
+URL = paste0("https://raw.githubusercontent.com/", 
+             "rfordatascience/tidytuesday/master/data/", 
+             "2020/2020-01-21/spotify_songs.csv")
+
+spotify_df = fread(URL)
+datatable(spotify_df, extensions = 'Buttons', options = list(dom = 'Bfrtip', buttons = I('colvis')))
+```
+
+#### Data Cleaning
+
+The data cleaning process involved the following steps:-
+
+1. Checking data types for all columns that should be coerced into more intuitive type
+2. Looking for null values
+3. Looking at the duration of the songs to ensure they qualify to be recognized as "songs"
+4. Looking for duplicates. Not necessarily all rows but customized which will clean the data for better analysis
+5. Adding new columns, manipulating and removing existing columns
+
+**Investigating data types**
+
+```{r data_types, message=FALSE, warning=FALSE}
+str(spotify_df)
+```
+
+---
+The data types look good apart from *track_album_release_date* which is character. We won't change this datatype as we will be using year-wise data for analysis.
+---
+
+```{r release_date, include=FALSE, warning=FALSE, message=FALSE}
+unique(spotify_df$track_album_release_date)
+```
+
+**Investigating missing rows**
+
+```{r missing_values, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+
+# checking missing values for each columns
+colSums(is.na(spotify_df))
+
+# counting total number of missing rows and removing them
+missing_rows = spotify_df[rowSums(is.na(spotify_df)) > 0, ]
+spotify_df = spotify_df[complete.cases(spotify_df), ]
+```
+
+---
+A total of 5 rows were there that had missing values in total. Being so small in number as compared to the whole dataset, they were removed.
+---
+
+**Investigating song duration**
+
+```{r song_duration, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# removing songs whose duration is too huge or less
+duration_out = boxplot(spotify_df$duration_ms, 
+                             plot = F, range = 3)$out
+spotify_df = spotify_df[!spotify_df$duration_ms %in% duration_out, ]
+nrow(spotify_df[spotify_df$duration_ms < 60000, ])
+spotify_df = spotify_df[spotify_df$duration_ms > 60000, ]
+rm(duration_out)
+```
+
+---
+The idea behind removing songs based on duration was that in order to do analysis which are in true ways songs, very large and very small songs should be removed. Small songs generally could represent ringtones or music while large songs will have a lot of variance in terms of audio features and that would confuse the model to categorise the genre.
+---
+
+**Removing columns**
+
+``` {r playlist_name_id, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# removing playlist name as they are names given by the users 
+# which are highly subjective and add least information
+unique(spotify_df$playlist_name)
+spotify_df = spotify_df[, -c("playlist_name", "playlist_id")]
+```
+
+---
+The playlist name and their corresponding ids are removed as they are names given by the users which are highly subjective and add least information.
+---
+
+**Investigating duplicates**
+
+``` {r duplicates, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# checking duplicates based on track name, artist and release date
+duplicate_rows = spotify_df[duplicated(
+  spotify_df[, c("track_name", "track_artist", "track_album_release_date")])]
+duplicate_rows = duplicate_rows[order(track_name), ]
+```
+
+---
+We expect the data to be a single row that comprises of song, artist and release date however that was not the case. Since the genres and subgenres were actually stated by the users the songs in some cases were classified in more than one categories which resulted in duplicates.<br>
+Another reason for duplicates were the popularity scores which were found to be different for swame tracks. We don't remove these as it could showcase popularity based on different regions. More information will have to be required for this.
+---
+
+**Adding new columns and manipulating existing ones**
+
+``` {r manipulation, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# returns the mode of categorical values
+# if number of occurence is same, returns all of them
+mode = function(x, type) {
+  if(type == 'subgenre') {
+    cat_values = as.factor(x)
+    levels(cat_values)[which.max(tabulate(cat_values))] 
+  } else {
+    cat_values = as.factor(x)
+    temp = table(x)
+    paste(levels(cat_values)[which(temp == max(temp))], collapse = ',')
+  }
+}
+
+# aggregating different genre and subgenre in a single row separated by comma
+# adding columns for the mode of genre and subgenre for each track
+spotify_df = spotify_df %>%
+  group_by(track_name, track_artist, track_album_release_date) %>%
+  mutate(playlist_genre_new = map_chr(
+    playlist_genre, ~toString(setdiff(playlist_genre, .x))), 
+    playlist_subgenre_new = map_chr(
+    playlist_subgenre, ~toString(setdiff(playlist_subgenre, .x))), 
+    genre_mode = mode(playlist_genre, "genre"), 
+    subgenre_mode = mode(playlist_subgenre, "subgenre")) %>%
+  ungroup()
+
+spotify_df = unite(spotify_df, "playlist_genre", 
+               c("playlist_genre", "playlist_genre_new"), 
+               sep = ",")
+spotify_df = unite(spotify_df, "playlist_subgenre", 
+               c("playlist_subgenre", "playlist_subgenre_new"), 
+               sep = ",")
+spotify_df$playlist_genre = gsub(",$", "", spotify_df$playlist_genre)
+spotify_df$playlist_subgenre = gsub(",$", "", spotify_df$playlist_subgenre)
+
+spotify_df = spotify_df[!duplicated(spotify_df[c("track_name", "track_artist", 
+                                                 "track_album_release_date")]), ]
+
+# separating date to year, month and day
+# assuming the day to be the 1st of the month where missing
+# assuming the month to be Jan where month is missing
+spotify_df = separate(spotify_df, col = track_album_release_date, 
+                      into = c("year", "month", "day"), sep = "-")
+colSums(is.na(spotify_df))
+spotify_df[is.na(spotify_df)] = "01"
+spotify_df[c("year","month", "day")] = sapply(spotify_df[c("year","month", "day")], 
+                                               as.integer)
+
+# changing multigenre mode to a single genre based on the euclidean distance
+# assigned to the closest the audio features are to the median of concerned genres
+audio_features = colnames(spotify_df)[12:23]
+single_genre_df = filter(spotify_df, !grepl(",", genre_mode))
+multi_genre_df = filter(spotify_df, grepl(",", genre_mode))
+median_df = single_genre_df %>%
+  select(c('genre_mode', all_of(audio_features))) %>%
+  group_by(genre_mode) %>%
+  summarise_if(is.numeric, median) %>%
+  ungroup()
+for(i in 1:nrow(multi_genre_df)) {
+  temp = multi_genre_df[i, c('genre_mode', audio_features)]
+  multi_genres = strsplit(temp$genre_mode, ",")[[1]]
+  dist_vector = c()
+  for(j in 1:length(multi_genres)) {
+    median_values = filter(median_df, genre_mode == multi_genres[j])
+    eucli_dist = dist(rbind(temp[, audio_features], 
+                            median_values[, audio_features])[, -c(12)])[1]
+    dist_vector = append(dist_vector, eucli_dist)
+  }
+  multi_genre_df$genre_mode[i] = multi_genres[which(dist_vector == min(dist_vector))]
+}
+spotify_df = rbind(single_genre_df, multi_genre_df)
+rm(median_df, median_values, multi_genre_df, single_genre_df, temp)
+```
+
+---
+1. Multiple genres and subgenres that were seen for the same song are now represented in a single row separated by comma. We didn't want any loss of information so all the genres and subgenres were preserved.
+2. Two new columns *genre_mode* and *subgenre_mode* were added that represent the genre and subgenre that was classified most by the users for that song. Where the mode was from two or more genres, we took the genre which had the least euclidean distance with the median of that genre. Our analysis will mostly revolve around *genre_mode*
+3. *Date* is now split between year, month and date for year-wise analysis
+---
+
+#### Cleaned Dataset
+
+Following is the frequency count of genres.
+
+```{r genre_table, message=FALSE, warning=FALSE, echo=FALSE}
+genre_df = data.frame(table(spotify_df$genre_mode))
+colnames(genre_df) = c('Genre', 'Count')
+genre_df %>%
+  kbl() %>%
+  kable_paper("hover") %>%
+  kable_classic(html_font = "Cambria") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+``` 
+
+---
+No imbalanced classfication is seen for any genre
+---
+
+After data cleaning, the final dataset looks like below:-
+
+```{r final_data, message=FALSE, warning=FALSE, echo=FALSE}
+datatable(spotify_df, extensions = 'Buttons', options = list(dom = 'Bfrtip', buttons = I('colvis')))
+``` 
+
+### Exploratory Data Analysis {.tabset}
+
+This sections deals with exploring audio features song genre and track popularity 
+
+```{r genres, include=FALSE, warning=FALSE, message=FALSE}
+genres = unique(spotify_df$genre_mode)
+```
+
+#### Audio features distribution and outliers
+
+**Distribution of audio features**
+
+``` {r audio_distribution, message=FALSE, warning=FALSE, echo=TRUE}
+# checking the distribution of audio features
+plot_list = list()
+for (i in 1:length(audio_features)) {
+  plot_list[[i]] = ggplot(spotify_df, aes_string(x = audio_features[i])) + 
+    geom_density(color = "darkblue", fill = "lightblue") 
+}
+do.call(grid.arrange, 
+        c(plot_list, list(top = "Density distribution of audio features")))
+```
+
+---
+*Danceability, energy and loudness* are skewed towards right which could be the most important factors to a song's popularity. There are very few songs where too much *speechiness* or too much *acousticness* are involved. A few songs have also been performed live according to *liveness* and songs are varying from sad to cheerful as represented by *valence*.
+---
+
+**Boxlot representation of audio features**
+
+``` {r audio_boxplot, message=FALSE, warning=FALSE, echo=TRUE}
+# checking for outliers in audio features
+plot_list = list()
+for (i in 1:length(audio_features)) {
+  plot_list[[i]] = ggplot(spotify_df, aes_string(y = audio_features[i])) + 
+    geom_boxplot(color = "darkblue", fill = "lightblue", outlier.colour = "red", 
+                 outlier.shape = 1, outlier.alpha = 0.5)
+}
+do.call(grid.arrange, 
+        c(plot_list, list(top = "Boxplot representation of audio features")))
+```
+
+---
+There are outliers in every audio features. *Instrumentalness* is very very low barring outliers meaning a few of the songs are instrumental.
+---
+
+**Default percentage of outliers based on boxplot**
+
+``` {r outlier_percent, message=FALSE, warning=FALSE, echo=TRUE}
+# getting default percentage of outliers based on boxplot
+for (i in 1:length(audio_features)) {
+  out_percent = length(boxplot(spotify_df[, c(audio_features[i])], 
+                               plot = F, range = 1.5)
+                       $out) * 100 / nrow(spotify_df)
+  print(paste0("The outlier percentage for ", 
+               audio_features[i], " is ", round(out_percent, 2), "%"))
+}
+```
+
+---
+The outlier percentage is  under control apart from *speechiness* and *instrumentalness*. It would be interesting to see if any specific genres are driving this outlier presence.  
+---
+
+**Boxplot representation of audio features based on genre**
+
+``` {r audio_genre_boxplot, message=FALSE, warning=FALSE, echo=TRUE}
+# checking the range in audio features based on genre
+plot_list = list()
+for (i in 1:length(audio_features)) {
+  plot_list[[i]] = ggplot(spotify_df, 
+                          aes_string(x = "genre_mode", y = audio_features[i])) + 
+    geom_boxplot(color = "darkblue", fill = "lightblue", outlier.colour = "red", 
+                 outlier.shape = 1, outlier.alpha = 0.5) + 
+      xlab("genre")
+}
+do.call(grid.arrange, 
+        c(plot_list, list(top = "Boxplot representation of audio features for each genre")))
+```
+
+---
+1. Interestingly, rap has been associated with more *danceability* than other genres.
+2. Rap genre has *speechiness* more as compared to other genres and R&B is low on energy which is expected.
+3. EDM which has a lot of music has thus more *instrumentalness* and R&B has more *acousticness*
+4. Unexpectedly, EDM has least *valence* when you would associate EDM with more of a "party" music. 
+5. Due to the similarity in how EDM's are created, the inter-quartile range of *tempo* for EDM is extremely low
+---
+
+#### Correlation among audio features with genre and popularity
+
+**Correlation of audio features**
+
+``` {r audio_corr, message=FALSE, warning=FALSE, echo=TRUE}
+# correlation between audio features
+spotify_df %>%
+  select(all_of(audio_features)) %>%
+  scale() %>%
+  cor() %>%
+  corrplot::corrplot(method = 'color', 
+                     order = 'hclust', 
+                     type = 'upper', 
+                     diag = FALSE, 
+                     tl.col = 'black',
+                     addCoef.col = "grey30",
+                     number.cex = 0.6,
+                     main = 'Correlation among audio features',
+                     mar = c(2,2,2,2),
+                     family = 'Avenir')
+```
+
+---
+The audio features have mostly been independent apart from some expected positive correlations and some negative. *Energy* is positvely associated with *loudness* while it's negative with *acousticness*. *Energy* and *Danceability* showing no linear correlation and *valence* being negatively associated with *instrumentalness* and no correlation with *acousticness* were surprising.
+---
+
+**Audio features over the years**
+
+``` {r audio_year, message=FALSE, warning=FALSE, echo=TRUE}
+# audio features over the years
+# taking mean for each year
+year_features_df = spotify_df %>%
+  select(c('year', all_of(audio_features))) %>%
+  group_by(year) %>%
+  summarise_if(is.numeric, mean) %>%
+  ungroup()
+plot_list = list()
+for (i in 1:length(audio_features)) {
+    plot_list[[i]] = ggplot(year_features_df, 
+                            aes_string(x = "year", y = audio_features[i])) + 
+      geom_line() 
+}
+do.call(grid.arrange, 
+        c(plot_list, list(top = "Audio features over the years")))
+```
+
+---
+1. In every graph there has been either an upward or downward spike for years around 1960. Either something unexpected happened during that time or they should be treated as outliers and removed while modeling.
+2. *Loudness*, *energy* and *danceability* has increased over the last couple of decades which might be correlated with millenials
+3. There has been significant rise in *speechiness* over the last 40 years.
+4. *Acousticness* is on the verge of decline.
+5. Song duration as represented by *duration_ms* has decreased starting the 2000's. This again could be driven by the millenial nature.
+---
+
+**Correlation among genres**
+
+``` {r genre_corr, message=FALSE, warning=FALSE, echo=TRUE}
+# correlation within genre
+# getting median values for each genre and finding correlation between them
+genre_audio_df = spotify_df %>%
+  select(c('genre_mode', all_of(audio_features)), -c(mode, key)) %>%
+  group_by(genre_mode) %>%
+  summarise_if(is.numeric, median) %>%
+  ungroup() 
+genre_audio_df = select(genre_audio_df, -genre_mode)
+# scaling the values for better correlation mapping
+genre_audio_df = scale(genre_audio_df)
+genre_audio_df = t(genre_audio_df)
+colnames(genre_audio_df) = sort(unique(spotify_df$genre_mode))
+
+genre_audio_df %>%
+  cor() %>%
+  corrplot::corrplot(method = 'color', 
+                     order = 'hclust', 
+                     type = 'upper', 
+                     diag = FALSE, 
+                     tl.col = 'black',
+                     addCoef.col = "grey30",
+                     main = 'Correlation among genres',
+                     mar = c(2,2,2,2),
+                     family = 'Avenir',
+                     number.cex=0.85)
+```
+
+---
+1. EDM and R&B are highly negatively correlated
+2. Most of the genres are either negatively correlated or have shown no signs of positive correlation. This might help in modeling.
+---
+
+**Correlation of popularity with audio features**
+
+``` {r popularity_audio_corr, message=FALSE, warning=FALSE, echo=TRUE}
+# correlation of popularity with audio features
+popularity_features_df = spotify_df %>%
+  select(c('track_popularity', all_of(audio_features))) %>%
+  group_by(track_popularity) %>%
+  summarise_if(is.numeric, mean) %>%
+  ungroup()
+plot_list = list()
+for (i in 1:length(audio_features)) {
+  plot_list[[i]] = ggplot(popularity_features_df, aes_string(x = "track_popularity", 
+                                                 y = audio_features[i])) + 
+    geom_point(shape = 18, color = 4) +
+    geom_smooth(method = lm,  linetype = "dashed", color = "darkred", se = F) + 
+      xlab("popularity")
+}
+suppressMessages(do.call(grid.arrange, 
+                         c(plot_list, list(top = "Correlation of popularity with audio features"))))
+```
+
+---
+1. The baffling part is *energy* is negatively correlated.
+2. *Danceability* and *loudness* drive popularity.
+3. With increase in *instrumentalness*, *liveness* and *duration_ms* the popularity more or less becomes less.
+---
+
+#### Genre and popularity analysis
+
+**Popularity of genres over the years**
+
+``` {r genre_popularity_trend, message=FALSE, warning=FALSE, echo=TRUE}
+# popularity of genres over the years
+year_genre_features_df = spotify_df %>%
+  select(c('year', 'genre_mode', 'track_popularity')) %>%
+  group_by(year, genre_mode) %>%
+  summarise_if(is.numeric, mean) %>%
+  ungroup()
+plot_list = list()
+for (i in 1:length(genres)) {
+  temp = filter(year_genre_features_df, genre_mode == genres[i])
+  if (nrow(temp) > 0) {
+    plot_list[[i]] = ggplot(temp, 
+                            aes_string(x = "year", y = "track_popularity")) + 
+      geom_line() + 
+      ggtitle(paste0("Popularity trend for ", genres[i])) +
+      ylab("popularity")
+  }
+}
+do.call(grid.arrange, plot_list)
+```
+
+---
+Except R&B, the popularity in general of the whole music industry has increased. With digitalization, there is better reach and visibility.
+---
+
+**Impact of holiday season on any genre**
+
+``` {r genre_holiday, message=FALSE, warning=FALSE, echo=TRUE}
+# analysis if holiday season impacts any particular genre
+popularity_month_df = spotify_df %>%
+  select('month', 'genre_mode', 'track_popularity') %>%
+  group_by(month, genre_mode) %>%
+  summarise(popularity = mean(track_popularity)) %>%
+  ungroup()
+ggplot(popularity_month_df, aes(x = month, y = popularity)) +
+  geom_line(aes(color = genre_mode)) + theme_bw() + 
+    ggtitle("Month-wise popularity of genres") + 
+      ylab("popularity") + labs(color = "Genre")
+```
+
+---
+On account of parties that happen during the holiday season, the popularity of EDM in the later half of the year increases
+---
+
+#### Trend for songs
+
+**Number of songs released over the years**
+
+``` {r song_trend, message=FALSE, warning=FALSE, echo=TRUE}
+# trend for number of songs released
+song_count_df = spotify_df %>%
+  select('year') %>%
+  filter(year <= 2019) %>%
+  group_by(year) %>%
+  summarise(songs_released = n()) %>%
+  ungroup()
+ggplot(song_count_df, 
+       aes_string(x = "year", y = "songs_released")) + 
+  geom_line() + 
+    ggtitle("Number of songs released over the years") + 
+      ylab("songs released")
+```
+
+---
+There has been exponential rise in the song releases since 2000's. This again in all likelihood is due to digitalization.
+---
+
+**Number of songs released for each genre in the last 10 years**
+
+``` {r song_genre_trend, message=FALSE, warning=FALSE, echo=TRUE}
+# number of songs released for each genre in the last 10 years
+song_count_df = spotify_df %>%
+  select('year', 'genre_mode') %>%
+  filter(year > 2009 & year <= 2019) %>%
+  group_by(year, genre_mode) %>%
+  summarise(songs_released = n()) %>%
+  ungroup()
+ggplot(song_count_df, aes(x = year, y = songs_released)) +
+  geom_line(aes(color = genre_mode)) + theme_bw() +
+    ggtitle("Number of songs released in the last 10 years for each genre") + 
+      ylab("songs released") + labs(color = "Genre")
+```
+
+---
+1. While the popularity for EDM was lowest amongst all genres, unexpectedly the number of songs released for EDM are highest. This might be because of high competition and saturation that popularity is not that great.
+2. R&B in future years might be dying as it's low on popularity and its main audio feature *acousticness* is also gone down over the years.
+3. While the popularity of rock remains good, the number of songs released lately have been lowest.
+---
+
+### Modeling {.tabset}
+
+This is the modeling section where the genre is tried to be classified based on the audio features
+
+#### Feature selection and standardization
+
+**Data Filtering**
+
+``` {r outlier_filtering, message=FALSE, warning=FALSE, echo=TRUE}
+# filtering out data before 1970 due to different spikes as observed in the EDA
+spotify_df = filter(spotify_df, (year > 1970))
+summary(spotify_df[, audio_features])
+```
+
+---
+As explored in the visualization section, there was something odd that happened between 1960-1970 as there was a spike in almost all the audio features. Given this decade represented only ~150 data points of ~27k, they were removed.
+---
+
+**Feature Selection and Standardization**
+
+``` {r feature_standardization, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# taking only audio features for genre classification
+spotify_df = spotify_df %>%
+  select(c('genre_mode'), all_of(audio_features))
+colnames(spotify_df)[1] = "genre"
+
+# scaling audio features
+spotify_df = spotify_df %>%
+  mutate_if(is.numeric, scale)
+```
+
+---
+The final modeling will happen only on the audio features. They have been scaled for preventing giving any undue default weightage to any of the features.
+---
+
+**Multicollinearity sanity-check**
+
+``` {r vif_model, message=FALSE, warning=FALSE, echo=TRUE, results = 'hide'}
+logistic_model = multinom(genre ~., data = spotify_df)
+```
+
+``` {r vif, message=FALSE, warning=FALSE, echo=TRUE}
+# checking for multicollinearity
+vif(logistic_model)
+```
+
+---
+Since no multicollinearity was found ( >5 ), we keep all the feaures.
+---
+
+**TSNE cluster analysis**
+
+``` {r tsne, message=FALSE, warning=FALSE, echo=TRUE}
+# observing inter-distance of genres and intra-distance within genres
+# TSNE algorithm shows very poor clustering
+temp = spotify_df %>%
+  mutate(ID = row_number())
+tsne_fit = temp %>%
+  select('ID', all_of(audio_features)) %>%
+  column_to_rownames("ID") %>%
+  Rtsne(check_duplicates = F)
+tsne_df = tsne_fit$Y %>% 
+  as.data.frame() %>%
+  rename(tSNE1 = "V1", tSNE2 = "V2") %>%
+  mutate(ID = row_number())
+tsne_df = tsne_df %>%
+  inner_join(temp, by = "ID")
+tsne_df %>%
+  ggplot(aes(x = tSNE1, 
+             y = tSNE2,
+             color = genre)) +
+  geom_point() +
+  theme(legend.position = "bottom")
+```
+
+---
+TSNE algorithm could not identify unique clusters for the genres. At this point, the inference that can be made is there is a lot of overlapping between the genres in terms of the audio features and finding aunique genre based on just the audio features won't be sufficient
+---
+
+#### Predicting genre classification
+
+**Train-Test split**
+
+``` {r train-test, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# train-test split
+index = createDataPartition(spotify_df$genre, p = 0.7, list = F)
+train_df = spotify_df[index,]
+test_df = spotify_df[-index,]
+```
+
+---
+Taking 70% of the data as training and 30% as the test
+---
+
+**Logistic Regression**
+
+``` {r lm, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# Logistic Regression
+logistic_model = multinom(genre ~., data = train_df)
+```
+
+``` {r lm_metric, message=FALSE, warning=FALSE, echo=TRUE}
+predicted_genre = predict(logistic_model, newdata = train_df[-1])
+confusionMatrix(data = predicted_genre, 
+                reference = as.factor(train_df$genre))$overall[1]
+predicted_genre = predict(logistic_model, test_df[-1])
+confusionMatrix(data = predicted_genre, reference = as.factor(test_df$genre))
+```
+
+---
+Both training and test accuracy are less than 50%. Sensitivity for each genre was in 35-50% range meaning the model had a hard time recognizing the true positives.
+---
+
+``` {r evaluating_p-value, message=FALSE, warning=FALSE, echo=TRUE}
+# calculating p-value
+z = summary(logistic_model)$coefficients / summary(logistic_model)$standard.errors
+p = (1 - pnorm(abs(z), 0, 1)) * 2
+print(p)
+```
+
+---
+The p-values of *key* for each genre is more than 0.05 which could indicate failure to reject null hypothesis of no association. Below is the logistic regression without *key*, *mode* and *duration_ms* to test if the accuracy got better.
+---
+
+``` {r lm_trimmed, message=FALSE, warning=FALSE, echo=TRUE, results = 'hide'}
+# Logistic Regression without key, mode and duration_ms
+logistic_model = multinom(genre ~., data = train_df[-c(4, 6, 13)])
+```
+
+``` {r lm_trimmed_metric, message=FALSE, warning=FALSE, echo=TRUE}
+predicted_genre = predict(logistic_model, test_df[-c(1, 4, 6, 13)])
+confusionMatrix(data = predicted_genre, reference = as.factor(test_df$genre))
+```
+
+---
+No improvement was seen after removing *key*, *mode* and *duration_ms*
+---
+
+**K-NN**
+
+``` {r knn, message=FALSE, warning=FALSE, echo=TRUE}
+predicted_genre = knn(train = train_df[, -1],
+                 test = test_df[, -1],
+                 cl = train_df$genre,
+                 k = 5)
+confusionMatrix(data = predicted_genre, reference = as.factor(test_df$genre))
+```
+
+---
+K-NN performed poorer to Logistic regression both in terms of accuracy and sensitivity. The reason could be as K-NN looks for it's nearest neighbours, given that there is so much overlapping of genres as visualized through TSNE, the model failed.
+---
+
+**SVM**
+
+``` {r svm, message=FALSE, warning=FALSE, echo=TRUE}
+svm_model = svm(as.factor(genre) ~ ., data = train_df, kernel = "radial")
+predicted_genre = predict(svm_model, newdata = train_df[-1])
+confusionMatrix(data = predicted_genre, 
+                reference = as.factor(train_df$genre))$overall[1]
+predicted_genre = predict(svm_model, test_df[-1], type = "C-classification")
+confusionMatrix(data = predicted_genre, reference = as.factor(test_df$genre))
+```
+
+---
+The model has slightly improved as radial kernel was introduced into the model to bring non-linearity to the equation. Sensitivity for rap and rock has also increased.
+---
+
+**Decision Tree**
+
+``` {r decision_tree, message=FALSE, warning=FALSE, echo=TRUE}
+dt_model = rpart(genre ~ ., data = train_df)
+predicted_genre = predict(dt_model, newdata = train_df[-1])
+predicted_genre = colnames(predicted_genre)[apply(predicted_genre, 1, which.max)]
+confusionMatrix(data = as.factor(predicted_genre), 
+                reference = as.factor(train_df$genre))$overall[1]
+predicted_genre = predict(dt_model, newdata = test_df[-1], type = "class")
+confusionMatrix(data = predicted_genre, reference = as.factor(test_df$genre))
+```
+
+---
+The model accuracy is the least for both training and test accuracy. From the sensitivity and specificity, it looks that model has assumed pop genre more or less as a noise. Let's see how the tree was constructed from a graphical point of view.
+---
+
+``` {r decision_tree_graph, message=FALSE, warning=FALSE, echo=TRUE}
+rpart.plot(dt_model, 
+           type = 5, 
+           extra = 104,
+           box.palette = list(purple = "#490B32",
+                              red = "#9A031E",
+                              orange = '#FB8B24',
+                              dark_blue = "#0F4C5C",
+                              blue = "#5DA9E9",
+                              grey = '#66717E'),
+           leaf.round = 0,
+           fallen.leaves = FALSE, 
+           branch = 0.3, 
+           under = TRUE,
+           under.col = 'grey40',
+           family = 'Avenir',
+           main = 'Genre Decision Tree',
+           tweak = 1.2)
+```
+
+---
+Majorly the decision tree had maximum information gain on *speechiness*, *danceability* and *tempo*. From the graph it can be seen that pop and r&b were classified least.
+---
+
+**Random Forest**
+
+``` {r random_forest, message=FALSE, warning=FALSE, echo=TRUE}
+rf_model = randomForest(as.factor(genre) ~ ., data = train_df,  
+                        ntree = 500, importance = T)
+predicted_genre = predict(rf_model, newdata = train_df[-1])
+confusionMatrix(data = predicted_genre, 
+                reference = as.factor(train_df$genre))$overall[1]
+predicted_genre = predict(rf_model, newdata = test_df[-1])
+confusionMatrix(data = predicted_genre, reference = as.factor(test_df$genre))
+```
+
+---
+The model has clearly overfitted as can be seen from the vast difference between training and test accuracy.
+---
+
+**XGBoost**
+
+```{r xgb, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+xgb_model = xgboost(data = as.matrix(train_df[-1]), 
+                    label = as.integer(as.factor(train_df$genre)),
+                    nrounds = 25,
+                    verbose = FALSE, 
+                    params = list(objective = "multi:softmax",
+                                  num_class = 6 + 1))
+```
+
+``` {r xgb_metric, message=FALSE, warning=FALSE, echo=TRUE}
+predicted_genre = predict(xgb_model, newdata = as.matrix(train_df[-1]))
+predicted_genre = levels(as.factor(train_df$genre))[predicted_genre]
+confusionMatrix(data = as.factor(predicted_genre), 
+                reference = as.factor(train_df$genre))$overall[1]
+predicted_genre = predict(xgb_model, newdata = as.matrix(test_df[-1]))
+predicted_genre = levels(as.factor(test_df$genre))[predicted_genre]
+confusionMatrix(data = as.factor(predicted_genre), 
+                reference = as.factor(test_df$genre))
+```
+
+---
+XGBoost has shown the best results in terms of training and test accuracy and being consistent sensitivity and specificity for all genres.
+---
+
+**Feature Importance of Decision Tree, Random Forest and XGBoost**
+
+``` {r feature_importance, message=FALSE, warning=FALSE, echo=TRUE}
+# comparing feature importance between Decision Tree, Random Forest and XGBoost
+importance_dt = data.frame(importance = dt_model$variable.importance)
+importance_dt$feature = row.names(importance_dt)
+importance_rf = data.frame(importance = randomForest::importance(rf_model, type = 2))
+importance_rf$feature = row.names(importance_rf)
+importance_xgb = xgb.importance(model = xgb_model)
+compare_importance = importance_xgb %>%
+  select(Feature, Gain) %>%
+  left_join(importance_dt, by = c('Feature' = 'feature')) %>%
+  left_join(importance_rf, by = c('Feature' = 'feature')) %>%
+  rename('xgboost' = 'Gain',
+         'decision_tree' = 'importance',
+         'random_forest' = 'MeanDecreaseGini')
+compare_importance = compare_importance %>%
+  mutate_if(is.numeric, scale) %>%
+  pivot_longer(cols = c('xgboost', 'decision_tree', 'random_forest')) %>%
+  rename('model' = 'name')
+ggplot(compare_importance, aes(x = reorder(Feature, value, na.rm = T), y = value, color = model)) + 
+  geom_point(size = 2) + 
+  coord_flip() +
+  labs(title = 'Variable Importance by Model',
+       y = 'Scaled value', x = '')
+```
+
+---
+*tempo* and *speechiness* have been recognized by all the 3 models as the most important features. From the EDA it can be seen that EDM as a genre can be easily recognized by *tempo* and RAP for *speechiness*. In all likelihood, this is why both the sensitivity and specificity are high for Rap and EDM.
+---
+
+#### Hyperparameter Tuning
+
+Please note that hyperparameter tuning took about an hour to run after parallelizing and hence has been commented. Please uncomment the code to run the tuning model. Also, Random Search has been used to make it less computationally expensive instead of Grid Search. Hence the results of the hyperparameters will most likely differ.
+
+**Creating parallel processing**
+
+``` {r parallel_process, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# cl = makePSOCKcluster(6)
+# registerDoParallel(cl)
+```
+
+---
+Running on 6 cores
+---
+
+``` {r random_search, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# fitControl = trainControl(search = 'random', method = "repeatedcv",
+#                           number = 5, repeats = 3, allowParallel = T)
+```
+
+---
+Hyperparameters will be evaluated based on cross-validation using random-search algorithm
+---
+
+**SVM**
+``` {r parallel_svm, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# svm_fit = train(genre ~ ., data = train_df,
+#                 method = "svmRadial",
+#                 trControl = fitControl,
+#                 verbose = F,
+#                 tuneLength = 2)
+```
+
+``` {r svm_best, message=FALSE, warning=FALSE, echo=TRUE}
+# print(svm_fit)
+```
+
+**Random Forest**
+
+``` {r parallel_rf, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# rf_fit = train(genre ~ ., data = train_df,
+#                method = "ranger",
+#                trControl = fitControl,
+#                verbose = F,
+#                tuneLength = 5)
+```
+
+``` {r rf_best, message=FALSE, warning=FALSE, echo=TRUE}
+# print(rf_fit)
+```
+
+**XGBoost**
+
+``` {r parallel_xgb, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# xgb_fit = train(genre ~ ., data = train_df,
+#                 method = "xgbTree",
+#                 trControl = fitControl,
+#                 verbose = F,
+#                 tuneLength = 10)
+```
+
+``` {r xgb_best, message=FALSE, warning=FALSE, echo=TRUE}
+# print(xgb_fit)
+```
+
+``` {r stop_parallel_process, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+# stopCluster(cl)
+```
+
+Parameters that Random Search outputted in one of the iterations:-
+
+- *SVM* -> sigma = 0.01, C = 18.8
+- *Random Forest* -> min.node.size = 18, mtry = 6
+- *XGBoost* ->  nrounds = 910, max_depth = 5, eta = 0.012, gamma = 3.8, colsample_bytree = 0.5, min_child_weight = 14, subsample = 0.85
+
+**Stacking**
+
+Using the hyperparameters found, we will create a stacking layer from SVM, Random Forest and XGBoost for Logistic Regression
+
+``` {r stack_models, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+svm_model = svm(as.factor(genre) ~ ., 
+                data = train_df, 
+                kernel = 'radial', 
+                sigma = 0.01, 
+                C = 18.8)
+svm_pred = predict(svm_model, newdata = train_df[-1])
+svm_pred_test = predict(svm_model, newdata = test_df[-1])
+
+rf_model = randomForest(as.factor(genre) ~ ., 
+                        data = train_df,  
+                        ntree = 500, 
+                        importance = T, 
+                        mtry = 6, 
+                        min.node.size = 18)
+rf_pred = predict(rf_model, newdata = train_df[-1])
+rf_pred_test = predict(rf_model, newdata = test_df[-1])
+
+xgb_model = xgboost(data = as.matrix(train_df[-1]), 
+                    label = as.integer(as.factor(train_df$genre)),
+                    nrounds = 910,
+                    max_depth = 5,
+                    eta = 0.012, 
+                    gamma = 3.8,
+                    colsample_bytree = 0.5, 
+                    min_child_weight = 14, 
+                    subsample = 0.85,
+                    verbose = FALSE, 
+                    params = list(objective = "multi:softmax",
+                                  num_class = 6 + 1))
+xgb_pred = predict(xgb_model, newdata = as.matrix(train_df[-1]))
+xgb_pred = levels(as.factor(train_df$genre))[xgb_pred]
+xgb_pred_test = predict(xgb_model, newdata = as.matrix(test_df[-1]))
+xgb_pred_test = levels(as.factor(test_df$genre))[xgb_pred_test]
+
+stacked_df = data.frame(svm = svm_pred, 
+                        rf = rf_pred,
+                        xgb = xgb_pred,
+                        genre = train_df[1])
+stacked_df_test = data.frame(svm = svm_pred_test, 
+                        rf = rf_pred_test,
+                        xgb = xgb_pred_test,
+                        genre = test_df[1])
+
+logistic_model = multinom(genre ~., data = stacked_df)
+```
+
+``` {r stack_metric, message=FALSE, warning=FALSE, echo=TRUE}
+predicted_genre = predict(logistic_model, newdata = stacked_df[-4])
+confusionMatrix(data = as.factor(predicted_genre), 
+                reference = as.factor(stacked_df$genre))$overall[1]
+predicted_genre = predict(logistic_model, stacked_df_test[-4])
+confusionMatrix(data = predicted_genre, 
+                reference = as.factor(stacked_df_test$genre))
+```
+
+---
+The model has overfitted in stacking hence will fail on any other sample size. XGBoost was the best model overall after hyperparameter tuning giving an accuracy of 57%.
+---
+
+### Summary {.tabset}
+
+***Genre***
+
+The genre classfication model achieved an accuracy of 57%. Though better than a random guess ( $1/6$ ), the exercise gave a lot of inner understanding of the data space and what could have been better
+
+- The genres were labeled by the end-users rather than the company itself which made it highly subjective and required music understanding in order to correctly label the genres.
+- Given there were many end-users who labeled, the problem became a multi-label rather than a single label.
+- There is a lot of overlapping of genres if only the audio features are considered. It could be either lack of subject matter expertise by the users who labeled the genre or that we are currently living in a world where music is not defined by genres rather than a mix of audio features that the end-user wants to listen.
+
+*speechiness*, *danceability* and *tempo* were the main features that helped in identifying a few genres. Rap ( $68$% accuracy ) was associated with high *speechiness*, Rock ( $68$% accuracy ) could be explained by low *danceability* and EDM ($72$% accuracy ) was linked with high *tempo*. Latin ( $40$% accuracy ), R&B ( $47$% accuracy ) and Pop ( $36$% accuracy ) were the most difficult genres to classify though Latin was somewhat differentiated by high *danceability* and R&B had a relatively high *duration_ms*. The models had a hard time recognizing pop as a genre due to it's high range of almost every audio feauture and hence had the lowest accuracy, sensitivity and specificity.
+
+***Popularity***
+
+- *Loudness*, *energy*, *danceability* and *speechiness* has increased over the last couple of decades whereas *acousticness* and *duration_ms* has decreased. The perception of millennials and Gen Z seems to be getting verified by the data itself :)
+- R&B is on the verge of decline while Rap as a genre has seen the most significant rise.
+- EDM sees the highest increase in popularity as the festive season approaches.
+- While EDM seems to be reaching the point of saturation (number of songs vs popularity), Rock is the most "pure" genre.
